@@ -1,5 +1,4 @@
-// src/api/supabase.js
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 // Replace with your Supabase credentials
 const SUPABASE_URL = 'https://pbfeehevtkmdlopdbkek.supabase.co';
@@ -7,4 +6,4 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-export default supabase;
+module.exports = supabase; // Use CommonJS syntax for export
