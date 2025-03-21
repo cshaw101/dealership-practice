@@ -1,61 +1,71 @@
-const { createClient } = require('@supabase/supabase-js');
 const express = require('express');
-const { authMiddleware, adminMiddleware } = require('../../backend/routes/middleware/AuthMiddleware'); // Import middleware
+const { createClient } = require('@supabase/supabase-js');
+const router = express.Router();
 
 // Initialize Supabase client
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-const router = express.Router();
-
-// Admin: Login
+// Admin: Login Route (without JWT or bcrypt)
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required." });
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
   }
 
   try {
-    const { data, error } = await supabase
+    // Fetch user from Supabase Auth
+    const { data: userData, error: authError } = await supabase.auth.api.getUserByEmail(email);
+    
+    if (authError || !userData) {
+      return res.status(401).json({ error: "Invalid email." });
+    }
+
+    // Check if the user exists in the custom users table
+    const { data: userInDB, error: dbError } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('auth_id', userData.id)
       .single();
 
-    if (error || !data) {
-      return res.status(401).json({ error: "Invalid credentials." });
+    // If user does not exist in the custom users table, insert them
+    if (dbError || !userInDB) {
+      const { data, error } = await supabase
+        .from('users')
+        .insert([{ email, auth_id: userData.id, role: 'employee' }]);
+
+      if (error) {
+        return res.status(500).json({ error: "Failed to insert user into database" });
+      }
     }
 
-    // Since we're removing bcrypt, we assume the admin is valid here
-    if (data.role !== 'admin') {
-      return res.status(403).json({ error: "Not authorized as admin" });
-    }
+    // Return success response after login
+    res.json({ message: "Login successful", user: userData });
 
-    res.json({ message: "Login successful", data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Admin: Create Employee (simplified, no role validation)
-router.post('/create-employee', async (req, res) => {
-  const { email, role } = req.body;
+// Admin: Create User Route
+router.post('/create-user', async (req, res) => {
+  const { email, role = 'employee' } = req.body;
 
-  if (!email || !role) {
-    return res.status(400).json({ error: "Email and role are required." });
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
   }
 
   try {
-    // Insert user with the provided email and role (no password handling for now)
+    // Insert the user into the "users" table with a default role
     const { data, error } = await supabase
       .from('users')
       .insert([{ email, role }]);
 
     if (error) {
-      return res.status(500).json({ error: "Failed to create employee" });
+      return res.status(500).json({ error: "Failed to create user." });
     }
 
-    res.json({ message: "Employee created successfully", data });
+    res.json({ message: "User created successfully", user: data[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
